@@ -1,3 +1,2 @@
 # 231b-Spring17
-231b-Spring 2017 
-This is a trial
+This repository contains the section materials for 231b (Spring 2017) at UC Berkeley. The bCourses site is: XXXX 
