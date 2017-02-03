@@ -1,0 +1,622 @@
+---
+title: "231b Section 3"
+author: "Natalia Garbiras-Díaz  \\ nataliagarbirasdiaz+231b@berkeley.edu"
+date: "February 3, 2017"
+output:
+  slidy_presentation:
+      fig_height: 4
+---
+
+Today 
+=====================================================================
+
+**1. Standard error for the difference in means**
+
+**2. Hypothesis testing**
+
++ 2a. T-test
++ 2b. Randomization inference
+
+**3. Bivariate Regression**
+
+
+```{r, echo=FALSE}
+
+rm(list=ls())
+
+# Loading needed libraries
+library(foreign) # to import csv
+library(ggplot2) # for plots using ggplot
+```
+
+---
+
+1. Standard error for the difference in means
+==========================================================
+  
++ You have shown in problem set 1 that the difference in means is an unbiased estimator of the true ATE. However, by chance, in some realizations of our sample that estimate might be off the true ATE. 
+
++ The SE tells us the likely size of the amount off. 
+
+---
+
+We are going to estimate the SE for the difference in means using the data from Chattopadhyay and Duflo (2004) referenced in Gerber and Green (2012).
+
+```{r}
+
+# the data
+gg_data <- as.data.frame(cbind(c(10,15,20,20,10,15,15), 
+                               c(15,15,30,15,20,15,30)))
+names(gg_data) <- c("Y_i0", "Y_i1")
+
+```
+
+
+---
+
+```{r}
+# generating empty dataframe to put the results
+ate <- as.data.frame(matrix(NA, 10000, 2))
+names(ate) <- c("estimated_ate", "estimated_se_ate")
+
+# sampling
+for (i in 1:10000){
+  
+  # generating treatment vector for this replicate
+  gg_data$treat <- 0
+  gg_data$treat[sample(1:7, 2, replace=F)]  <- 1
+  
+  treat_mean <- mean(gg_data$Y_i1[gg_data$treat==1])
+  treat_var <- var(gg_data$Y_i1[gg_data$treat==1])
+  
+  control_mean <- mean(gg_data$Y_i0[gg_data$treat==0])
+  control_var <- var(gg_data$Y_i0[gg_data$treat==0])
+  
+  ate[i,1] <- treat_mean - control_mean
+  ate[i,2] <- sqrt(treat_var/2 + control_var/5) 
+}
+```
+
+---
+
+Let's explore how this matrix looks like: 
+```{r}
+head(ate)
+```
+
+---
+
+```{r, echo=FALSE}
+
+m <- ggplot(ate, aes(x=estimated_ate))
+m + 
+  geom_histogram(aes(y = 100 * (..count..)/sum(..count..)), binwidth=.5, alpha=.5) + 
+  # geom_histogram(aes(y = ..density..)) +
+  geom_vline(xintercept = mean(ate$estimated_ate), col="red", size=1.25) +
+  theme_bw() +
+  xlab("Estimated ATE") +
+  ylab("Percent")
+
+
+```
+
++ What should be the title of this figure?
+
++ How could we use this graph to get the SE of the estimated ATE? 
+
+---
+
+```{r}
+# The SE of the estimated ATE is the standard deviation of this sampling distribution:
+se_sampling<-sd(ate[,1])
+se_sampling
+```
+
+---
+
++ Notice, the estimated SE will also have a distribution.
+
+```{r, echo=FALSE}
+
+m <- ggplot(ate, aes(x=estimated_se_ate))
+m + 
+  geom_histogram(aes(y = 100 * (..count..)/sum(..count..)), binwidth=.5, alpha=.5) + 
+  # geom_histogram(aes(y = ..density..)) +
+  geom_vline(xintercept = mean(ate$estimated_se_ate), col="red", size=1.25) +
+  theme_bw() +
+  xlab("Estimated SE") +
+  ylab("Percent")
+
+```
+
+What should the average of the estimated SEs?
+
+---
+
+```{r}
+
+# Comparing the true standard error to the conservative formula
+se_est<-mean(ate[,2])
+print(c(se_sampling, se_est))
+
+```
+
+2. Hypothesis testing 
+========================================================
+
+```{r}
+
+# generating treatment vector for a given experiment
+gg_data$treat <- c(1, 0, 0, 0, 0, 0, 1)
+
+# getting observed outcomes
+gg_data$observed <- ifelse(gg_data$treat==1, gg_data$Y_i1, gg_data$Y_i0)
+
+# ate
+ATE <- mean(gg_data$observed[gg_data$treat==1]) - mean(gg_data$observed[gg_data$treat==0])
+ATE
+
+```
+
+> - What is a p-value?
+
+
+2a. T-test
+========================================================
+
+```{r}
+treated <- gg_data$observed[gg_data$treat==1]
+treated
+
+var1 <- sum((treated - mean(treated))^2) / (length(treated) - 1)
+var1
+
+not_treated <- gg_data$observed[gg_data$treat==0]
+not_treated
+
+var0 <- sum((not_treated - mean(not_treated))^2) / (length(not_treated) - 1)
+var0
+
+estimated_se <- sqrt(var1/length(treated) + var0/length(not_treated))
+estimated_se # Why is this number different from 7.730 (the number in the lecture slides)?
+# rounding error!
+
+```
+
+---
+
+```{r}
+
+# converting to standard units: Why is it ATE - 0? 
+t_stat <- (ATE - 0) / estimated_se
+t_stat
+
+# To be able to get the right Student t Distribution, we need to calculate
+# the degrees of freedom (Satterthwaite)
+df <- (var1/length(treated) + var0/length(not_treated))^2 / 
+           ((var1/length(treated))^2 / (length(treated) - 1) + 
+           (var0/length(not_treated))^2 / (length(not_treated) - 1))
+df
+
+```
+
+---
+
+```{r}
+
+# Overlaying the t_stat to the student t distribution
+ggplot(data.frame(x = c(-5, 5)), aes(x)) + 
+  stat_function(fun=dt, args=list(df=df, ncp=0), col="blue", size=1) +
+  geom_vline(xintercept = mean(t_stat), col="red", size=1.25) 
+```
+
+---
+
+```{r}
+# One tailed p-value
+pt(t_stat, df=df, ncp=0, lower.tail=F)
+
+# Two tailed p-value
+pt(-t_stat, df=df, ncp=0, lower.tail=T) + pt(t_stat, df=1.12, ncp=0, lower.tail=F)
+
+```
+
+
+2b. Randomization inference 
+===========================================================================
+
+To get all the possible treatment vectors, we will generate 10000 differente ones...
+
+```{r}
+fake_treats <- matrix(NA, 10000, 7)
+for (i in 1:10000){
+fake_treats[i,] <- sample(gg_data$treat, 7, replace=F)
+}
+
+```
+
+... and then only keep the unique ones
+
+```{r}
+
+fake_treats <- unique(fake_treats)
+
+```
+
+---
+
+Now we need to calculate the ATE for each of these possible randomizations. For that, we will 
+need a loop
+
+```{r}
+rand_ate <- NA # placeholder vector for results
+
+for (i in 1:nrow(fake_treats)){ # for each of the fake treatment vectors
+  
+  mean_treat <- mean(gg_data$observed[fake_treats[i,]==1])
+  
+  mean_control <- mean(gg_data$observed[fake_treats[i,]==0])
+  
+  # calculating ATE for this randomization
+  rand_ate[i] <- mean_treat - mean_control
+  
+}
+
+```
+
+---
+
+Now we can plot the distribution of the randomization ATEs
+
+```{r, echo=FALSE, fig.height=4, fig.cap="Distribution of randomization ATEs"}
+
+m <- ggplot(as.data.frame(rand_ate), aes(x=rand_ate))
+m + 
+  geom_histogram(aes(y = ..density..), binwidth=.5) +
+  geom_vline(xintercept = ATE, col="red", size=1) +
+  theme_bw() +
+  xlab("Randomization ATEs") +
+  ylab("Density")
+
+```
+
+---
+
+And we can get the p-value
+
+```{r}
+
+# One tailed
+sum(rand_ate>=ATE)/length(rand_ate)
+
+# Two tailed
+sum(abs(rand_ate)>=ATE)/length(rand_ate)
+
+
+```
+
+---
+
+3. Bivariate Regression 
+========================================================
+
+We will be using the `family.rda` dataset, which we can download directly from the internet.
+
+```{r}
+load(url("http://www.stat.berkeley.edu/users/nolan/data/stat133/family.rda"))
+```
+
+---
+
+Let's see what we have here:
+
+```{r}
+dim(family)
+family
+```
+
+---
+
+We will work on linear regression with 4 coding exercises  
+========================================================
+
++ Work in groups for each exercise
++ Upload your code to codeshare <https://codeshare.io/2pqoZ4>. Before your code, please include a group identifier (e.g., "Group A") 
+
+---
+
+A. Write a function that calculates `r`, the correlation between two variables. Use only the functions `sum()`, `mean()`, `sqrt()` and `length()`.
+
+```{r, eval=FALSE}
+r <- function(x, y){
+  # This function takes two variables as input and returns their correlation.
+
+}
+```
+
+
+---
+
+One way we could do this:
+
+```{r}
+# Correlation function using sum, mean, and length
+r <- function(x, y) {
+  # this function takes two variables as input and returns their correlation.
+  
+  # lengths
+  n_x = length(x)
+  n_y = length(y)
+  
+  # means  
+  mean_x = mean(x)
+  mean_y = mean(y)
+  
+  # sd_x, with no df correction
+  sd_x = sqrt(sum((x - mean_x)^2) / (n_x))
+  # sd_y, with no df correction
+  sd_y = sqrt(sum((y - mean_y)^2) / (n_y))
+  
+  # cov(x, y)
+  cov_x_y = mean((x - mean_x)*(y - mean_y))
+  
+  # cov(x, y) / (sd_x * sd_y)
+  cov_x_y / (sd_x * sd_y)
+}
+
+```
+
+---
+
+Another way to do it:
+
+```{r}
+r <- function(x, y){
+  # This function takes two variables as input and returns their correlation.
+  
+  sx <- sqrt(mean((x-mean(x))^2))
+  sy <- sqrt(mean((y-mean(y))^2))
+  
+  
+  r <- sum(((x - mean(x))/sx) * ((y - mean(y)) / sy)) / (length(x))
+  
+  return(r)
+
+}
+
+```
+
+---
+
+B. Find the equation for the regression line predicting weight from height in the dataset (the column labels are fweight and fheight). Use only the functions `sd( )`, `mean( )`, `var( )` and your own `r()` function. 
+You can assign intermediate values to `sx`, and `sy` if you want, but it’s not necessary.
+
+---
+
+```{r}
+# variables
+x <- family$height
+y <- family$weight
+
+# sds
+sx <- sqrt(mean((x-mean(x))^2))
+sy <- sqrt(mean((y-mean(y))^2))
+
+# coefficients
+b_hat <- r(x,y) * (sy/sx)
+a_hat <- mean(y) - b_hat*mean(x)
+
+c(a_hat, b_hat)
+
+```
+
+---
+
+C. Organize what you did in (A) into a function called `regcoef()` that has a two arguments, an `x` and a `y` variable. The function should return a vector of length 2 with the regression coefficients predicting `y` from `x`.
+
+```{r, eval=FALSE}
+
+regcoef <- function(y, x){
+  # This function takes two variables as input and returns regression 
+  # coefficients predicting the first variable from the second.
+  
+
+}
+```
+
+To see if it works, you should be able to do
+```{r, eval=FALSE}
+regcoef(y=family$weight, x=family$height)
+```
+
+and get the results you got for (A). 
+
+(If you are feeling fancy, you can also add names describing what each coefficient is).
+
+---
+
+One way of doing this:
+
+```{r}
+regcoef <- function(y, x){
+  # This function takes two variables as input and returns regression 
+  # coefficients predicting the first variable from the second.
+  
+  # sds
+  sx <- sd(x)
+  sy <- sd(y)
+  
+  # correlation
+  r <- sum(((x - mean(x))/sx) * ((y - mean(y)) / sy)) / (length(x)-1)
+  
+  # coefficients
+  b_hat <- r * (sy/sx)
+  a_hat <- mean(y) - b_hat*mean(x)
+  
+  # output
+  out <- c(a_hat, b_hat)
+  names(out) <- c("b_0", "b_1")
+  return(out)
+}
+```
+
+---
+
+```{r}
+regcoef(y=family$weight, x=family$height)
+
+lm(family$weight ~ family$height)
+
+```
+
+How would you interpret this output? What is `r regcoef(y=family$weight, x=family$height)[1]`?  Is this a useful number?
+
+> - We are extrapolating from the data...
+
+---
+  
+  
+D. Write another function, called `regline()`, that will take the same inputs as `regcoef` and plot the data for `x` and `y` as well as the regression line (in red).  
+
+Functions to use: `regcoef()`, `plot()`, `lines()`, `abline()`.
+
+```{r, eval=FALSE}
+regline <- function(y, x){
+  # This function plots a scatterplot with the regression line in red.
+  }
+```
+
+The only output of the function should be the plot. 
+
+---
+
+One way of doing this:
+
+```{r}
+
+regline <- function(x, y){
+  
+  # lengths
+  n_x = length(x)
+  n_y = length(y)
+  
+  # means  
+  mean_x = mean(x)
+  mean_y = mean(y)
+  
+  # sd_x, with no df correction
+  sd_x = sqrt(sum((x - mean_x)^2) / (n_x))
+  # sd_y, with no df correction
+  sd_y = sqrt(sum((y - mean_y)^2) / (n_y))
+  
+  # cov(x, y)
+  cov_x_y = mean((x - mean_x)*(y - mean_y))
+  
+  # cov(x, y) / (sd_x * sd_y)
+  corr<-cov_x_y / (sd_x * sd_y)
+  
+  coef<-corr*(sd_y/sd_x)
+  intercept<-mean(y)-coef*mean(x)
+  
+  res<-c(corr, intercept, coef)
+  plot(x,y)
+  abline(intercept, coef, col="red")
+  names(res)<-c("corr","intercept","coef")
+  return(c(res))
+}
+
+with(family, regline(fheight, fweight))
+
+```
+
+
+```{r}
+
+regline <- function(y, x){
+  # This function plots a scatterplot with the regression line in red.
+  
+  coefs <- regcoef(y, x)
+  
+  plot(x, y, pch=16)
+  lines(x, (coefs[1]+coefs[2]*x), col="red", lwd=2)
+  
+}
+
+```
+
+---
+
+```{r, fig.height=5, fig.width=6}
+regline(y=family$weight, x=family$height)
+
+```
+
+---
+
+It is important that you understand the syntax line we use to add the regression line!
+
+```{r, eval=FALSE}
+  lines(x, (coefs[1]+coefs[2]*x), col="red", lwd=2)
+```
+
+What is the `y` argument here?
+
+---
+
+E. One last step! Let's add the SD line to the plot as well. Modify `regline()` including one or more lines of code that add the SD line to the plot.
+
+Hint: How do we calculate the slope of the SD line? What property of the SD line do we need to calculate the intercept?
+
+```{r, eval=FALSE}
+regline <- function(y, x){
+  # This function plots a scatterplot with the regression line in red and 
+  # the SD line in blue.
+  }
+```
+
+Again, the only output of the function should be the plot. 
+
+
+---
+
+One way of doing this:
+
+```{r}
+
+regline <- function(y, x){
+  # This function plots a scatterplot with the regression line in red and 
+  # the SD line in blue.
+  
+  coefs <- regcoef(y, x)
+  
+  plot(x, y, pch=16)
+  lines(x, (coefs[1]+coefs[2]*x), col="red", lwd=2)
+
+  # SD LINE
+  # slope of the SD line
+  sign <- cor(y,x)/abs(cor(y,x))
+  b <- (sd(y)/sd(x))*sign
+  # intercept of the SD line
+  a <- mean(y)-b*mean(x)
+  # adding the line to the plot
+  lines(x, a+b*x, col="blue", lwd=2)
+
+  # and just for completion let's add grey lines for the mean of x and y
+  abline(v=mean(x), col="grey")
+  abline(h=mean(y), col="grey")
+  }
+
+```
+
+---
+
+```{r, fig.height=5, fig.width=6}
+regline(y=family$weight, x=family$height)
+
+```
+
+Why are the regression and SD lines quite similar here?
+
+> - Because the correlation between `x` and `y` here ir `r cor(y=family$weight, x=family$height)`.  With a weaker correlation, lines would diverge more.
+
+
