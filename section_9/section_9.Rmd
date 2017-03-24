@@ -1,0 +1,351 @@
+---
+title: "Section 9"
+author: "Natalia Garbiras Díaz"
+date: "March 24, 2017"
+output: slidy_presentation
+---
+
+Today: MLE
+===============================
+- Stochastic and systematic components (example: logit)
+- Deriving and plotting the likelihood function
+- Finding the MLE and its SE
+- Reporting MLE results
+
+The setup
+=====
+
+>- We are interested in estimating parameters of conditional distributions (e.g., $P(y_i =1 \mid X)$).
+>- Each random draw can be written as ($y_i$, $x_i$) $\rightarrow$ we want to estimate the conditional distribution of $y_i$ given $x_i$. 
+>- In order to get the MLE, we need to first assume the underlying distribution of $y_i$ given $x_i$. That is why we have a *parametric* model with some finite number of unknown parameters that we need to estimate.
+>- With MLE we are looking for the parameter that maximizes the joint density of ($y_1, y_2, \cdots, y_N$) evaluated in the data. 
+>- + Notice we are not interested in $x_i$ so we do not specify a model for how $x_i$ is generated. Alternatively, we could think of $x_i$ as non-random (i.e., fixed features of a population).
+>- Notice also that while $y_i$ is independent, it is not identically distributed (depends on $X\beta$). 
+
+
+The DGP: Stochastic Component
+===============================
+
+PDF of a Bernoulli (binary) variable:
+
+$$Y_i \sim Y_{Bern}(Y_i \mid \pi_i) = (\pi_i)^{y_i} (1-\pi_i)^{(1-y_i)}$$
+
+where $y_i = \{0,1\}$. 
+
+Simplifies to $\pi_i$ if $y_i=1$ and $(1-\pi_i)$ if $y_i=0$.
+
+But what is $\pi_i$? For that we need a *link* function. 
+
+
+The Logistic Link Function
+===============================
+
+Systematic component (CDF): 
+
+$$\pi_i = F(x) = \Lambda(x) = \frac{1}{1+e^{-x}} = \frac{e^x}{1+e^x}$$
+
++ Note that $\Lambda(x) \in [0,1]$ for all $x$ 
+
+We can program this:
+
+```{r}
+logistic <- function(x){ exp(x) / (1 + exp(x)) }
+
+```
+
+---
+
+```{r}
+
+curve(logistic(x), xlim=c(-8, 8), xlab="x", main="CDF of the logistic distribution",
+      ylab="cumulative probability", col="blue", lwd=3)
+
+```
+
+---
+
+$\Lambda$ is our link function: it filters the linear combination (i.e., our model with covariates) and returns 0-1 bounded probabilities.
+
+So, with covariates, we have:
+
+$$\Lambda = F(X\beta) = \frac{1}{1+e^{-X\beta}} = \frac{e^{X\beta}}{1+e^{X\beta}}$$
+
+And: 
+
+$$P(y_i=1 \mid \beta) = \pi_i= \frac{1}{1+e^{-X\beta}}$$
+
+$$P(y_i=0 \mid \beta) = 1 - \pi_i= 1 - (\frac{1}{1+e^{-X\beta}})$$
+
+
+---
+
+A small dataset
+
+```{r}
+
+Y <- c(1, 0, 1, 0, 0, 1, 1)
+x <- c(.5, .3, .45, .4, .25, .7, .9)
+
+cbind(Y, x)
+
+```
+
+What is the joint probability distribution of these $n=7$ observations? 
+
+---
+
+$$P(y \mid \pi) = \prod_{i=1}^{n} \pi^{y_i} (1-\pi_i)^{1-y_i}$$
+
+where $\pi_i = F(x_i\beta) = \frac{1}{1+e^{-x_i\beta}}$
+
+And so the likelihood is $$L = P(y \mid X\beta) = \prod_{i=1}^{n} F(x_i\beta)^{y_i} (1-F(x_i\beta))^{1-y_i}$$
+
+And the log-likelihood is $$ \ln L = \sum_{i=1}^{n} \big( y_i \times  \ln [F(x_i\beta)] + (1-y_i) \times \ln [1-F(x_i\beta)] \big)$$
+
+----
+
+We can program the likelihood in `R`:
+
+```{r}
+
+LL <- function(beta, x, y){
+    
+    odds <- beta * x
+    
+    rate <- 1 / (1 + exp(-odds))
+    
+    sum( y * log(rate) + (1 - y) * log(1 - rate) )
+}
+
+```
+
+---
+
+And we can plot the log-likelihood of our fake data:
+
+```{r}
+
+LL_example <- function(x){
+    
+    odds <- x * c(.5, .3, .4, .4, .25) # here x is a placeholder for our vector of betas
+    
+    rate <- 1 / (1 + exp(-odds))
+    
+    y <- c(1, 0, 1, 0, 0)
+    
+    sum(ifelse(y==1, log(rate), log(1 - rate)))
+    
+}
+
+betas <- seq(-10, 10, by=.01)
+ll_betas <- unlist(lapply(betas, FUN=LL_example)) # no intercept here
+
+```
+
+---
+
+```{r, fig.height=4}
+
+par(mfrow=c(1,2))
+plot(betas, ll_betas, col="blue", type="l", lwd=3, ylab="log-likelihood")
+plot(betas, ll_betas, col="blue", type="l", lwd=3, ylab="log-likelihood", xlim=c(-5, 5))
+
+```
+
+What's the value of $\beta$ tha maximizes the log-likelihood?
+
+
+Getting the MLE (computation search).
+====
+
++ For many MLE, we do not have an analytic or closed-form solution (under the assumptions of the OLS, we do have one for the linear model). 
++ But we know that the MLE is the maximizer of the log-likehood (and, thus, also maximizes the likelihood function). 
+
+-----
+
+```{r}
+
+beta.start <- 0
+out  <-  optim(beta.start, 
+            fn=LL,
+            x=x,y=Y,
+            hessian=T,
+            method="L-BFGS-B", # stands for "Limited-memory Broyden-Fletcher-Goldfarb-Shanno"
+            control=list(fnscale=-1))
+out
+
+```
+
+[Interested in what `optim` does?](https://www.ibm.com/developerworks/library/ba-optimR-john-nash/)
+
+---
+
+```{r}
+
+mle <- out$par
+mle
+
+glm(Y~0+x, family=binomial(logit))
+
+```
+
+How to get a standard error for the MLE? 
+====
+
+(see Freedman Chapter 7, [Wooldridge Chapter 12](https://www.amazon.com/Econometric-Analysis-Cross-Section-Panel/dp/0262232588/ref=sr_1_4?s=books&ie=UTF8&qid=1490357174&sr=1-4&keywords=jeffrey+wooldridge), and [Greene Chapter 21](https://www.amazon.com/Econometric-Analysis-7th-William-Greene/dp/0131395386))
+
++ As previously mentioned, we often do not have an explicit expression for th MLE. 
++ We can rely on asymptotic theory (i.e., as $n \rightarrow \infty$) to get a sense of the statistical properties of our estimator (including it's asymptotic distribution). 
++ The asymptotic covariance matrix for the maximum likelihood estimator can be estimated by using the inverse of the Hessian evaluated at the maximum likelihood estimated (Greene 2011). 
++ The Hessian is simply the matrix of second derivates. In our case, it is just the second derivative of the log-likelihood function with respect to $\beta_{MLE}$. 
++ In our logit example, $$\mathbf{H}= \frac{\partial^2\ln L}{\partial\beta ~ \partial \beta'}= \sum_{i=1}^{n} \Lambda_i(1-\Lambda_i)X_iX'_i$$
++ Notice $\mathbf{H}$ is always negative definite so the log-likelihood is globally concave (i.e., we are finding a global maximum).
++ In the MLE, the Hessian is also called th **Fisher information matrix** noted with $I(\theta_o)$, where $\theta_o$ is the true parameter (see Freedman 2009 Chapter 7). 
++ The asymptiotic variance simplifies to (this also involves the Law of Large Numbers): $$\sqrt{n}(\hat{\theta}-\theta_o)\overset{d}{\to}N(0, I(\theta_o)^{-1})$$
++ Notice that the MLE is consistent and, therefore the above mean converges to 0. 
++ The Fisher information measures the average curvature of the log-likelihood around $\theta_o$
++ We can consistently estimate the Hessian with the sample analogue (i.e., $I({\hat{\theta}})^{-1}$). 
+
+---
+
+Now, let's get the variance-covariance matrix of our MLE in our observed data: 
+
+```{r}
+vcov <- -solve(out$hessian)
+```
+
+>+ What are the SEs? 
+
+---
+
+What are the SEs? 
+
+```{r}
+se<- sqrt(diag(vcov))
+se
+```
+Notice we do not have an intercept nor covariates.
+
+How should we present the results?
+==========================
+
+1. Simulate betas
+
+```{r}
+
+simbetas <- rnorm(100000, mle, sqrt(vcov)) 
+par(mfrow=c(1,1))
+plot(density(simbetas), col="slateblue", lwd=3)
+```
+
+---
+
+2. Simulate predicted value
+
+Let's say we get data for one more observation and we want to predict the probability of $y=1$
+
+```{r}
+
+new_obs <- .45 # our new data point
+
+cov <- simbetas * new_obs
+pred.p <- 1 / (1+exp(-cov))
+mean(pred.p)
+
+
+hist(pred.p, col="goldenrod", main="predicted probability")
+abline(v=mean(pred.p), col="red", lwd=3)
+
+quantile(pred.p, probs = c(0.25, 0.75))
+
+```
+
+---
+
+3. Simulate expected values
+
+```{r}
+
+# for the binomial distribution, the expected value equals 
+# the rate, so to get the expected value we can just take
+# the expectation of the predicted probabilities (for other
+# distributions this might not hold, and we might want to 
+# do the simulation of the stochastic component as well)
+# so here we could just do
+mean(pred.p)
+
+```
+
+---
+
+Simulate first differences
+
+```{r}
+
+new_obs
+new_obs.better <- 0.65
+
+cov <- simbetas * new_obs.better
+pred.p.2 <- 1 / (1 + exp(-cov))
+
+# to get the expected value, here we can again just take the 
+# mean of the predicted probabilities
+mean(pred.p.2)
+
+
+#now lets get the first difference
+firs.diff <- mean(pred.p.2) - mean(pred.p)
+firs.diff 
+```
+
+An increase in the independent variable is associated with an increase in the outcome.
+
+---
+
+Predicted probabilities plot
+
+How would we do the plot of predicted probabilities?
+
+```{r}
+# Let's take values of X from -1 to 1
+x_sim <- seq(-1, 1, by=.01)
+
+pred.prob <- matrix(NA, length(x_sim), 3)
+
+for(i in 1:length(x_sim)){
+
+    cov <- simbetas * x_sim[i]
+    pred.p <- 1/(1+exp(-cov))
+    
+    pred.prob[i,1] <- mean(pred.p)
+    
+    # And we can simulate 90% CIs: 
+    pred.prob[i,2] <- quantile(pred.p, probs=.05) # lower CI
+    pred.prob[i,3] <- quantile(pred.p, probs=.95) # upper CI
+}
+
+head(pred.prob)
+```
+
+---
+
+```{r}
+
+plot(x_sim, pred.prob[,1], 
+     col="slateblue", type="l", 
+     lty=1, lwd=3, main="Predicted probabilities",
+     xlab="x", ylab="predicted probability", ylim=c(min(pred.prob), max(pred.prob)))
+lines(x_sim,pred.prob[,2], col="slateblue", type="l", lty=3, lwd=2 )
+lines(x_sim,pred.prob[,3], col="slateblue", type="l", lty=2, lwd=2 )
+
+
+```
+
+
+Log odds
+====
+
++ Odds ratio: probability of a "success" to probability of a "failure" $$\frac{p}{1- p} = e^{X\beta}$$
++ Log odds ratio: $X\beta$
+
+
