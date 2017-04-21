@@ -543,7 +543,7 @@ But how would we test whether the *set* of covariates can jointly predict treatm
 
 ## The F-test 
 
-The F-test is used to conduct a significant test for the joint hypothesis that all coefficients are zero. The null hypothesis is of the form  $H0 : \beta_1 = \beta_2 = . . . = \beta_k = 0$.
+The F-test is used to conduct a significant test for the joint hypothesis that all coefficients are zero. The null hypothesis is of the form  $H_0 : \beta_1 = \beta_2 = . . . = \beta_k = 0$.
 
 We are comparing two models: one in which the coefficients of the pre-treatment covariates are allowed to vary and another in which they are constrained to zero. 
 
@@ -577,14 +577,14 @@ summary(reg)$fstatistic
 
 ```
 
-We can also calculate the F-test by hand. We first need $SSR_ur$. 
+We can also calculate the F-test by hand. We first need $SSR_{ur}$. 
 
 ```{r}
 SSRur <- sum(reg$residuals^2)
 SSRur
 ```
 
-What about $SSR_{ur}$. What is this unrestricted model?
+What about $SSR_{r}$. What is this restricted model?
 
 ---
 
