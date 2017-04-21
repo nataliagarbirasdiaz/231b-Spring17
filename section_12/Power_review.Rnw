@@ -1,0 +1,253 @@
+
+ \documentclass[12 pt]{article}
+
+\usepackage{amsmath}  % Better maths support
+ \usepackage{setspace}
+ \usepackage{txfonts}
+ \usepackage{soul}
+ \usepackage{hyperref}
+ \usepackage[left=1 in,top=1 in,right=1 in]{geometry}
+\doublespacing
+\setlength{\parindent}{0.5 in}
+
+
+\title {POL SCI 231b:  Power Review}
+\author{GSI Natalia Garbiras-D\'iaz\\University of California, Berkeley\\Spring 2017\\ ~\\ }
+\date{}
+
+\begin{document}
+
+\maketitle
+% Generates a title based on the \title, \author, and \date commands in the preamble.
+
+\singlespacing
+
+<<setup, echo=FALSE, cache=FALSE>>=
+library(knitr)
+# set global chunk options
+opts_chunk$set(fig.path='figure/minimal-', fig.align='center', fig.show='hold', 
+ tidy=TRUE)
+options(formatR.arrow=TRUE, width=45, tidy=TRUE)
+options(scipen = 999)
+@
+
+
+Before starting, here are some useful references: 
+
+\begin{itemize}
+\item Gerber and Green (2012, p.93)
+\item \href{http://egap.org/methods-guides/10-things-you-need-know-about-statistical-power}{EGAP 10 things you need to know about statistical power}
+\item \href{http://egap.org/content/power-analysis-simulations-r}{EGAP Power analysis for the standard design}
+\end{itemize}
+
+\section{What is power?}
+
+The \textit{statistical power} of a test is the probability that it will reject the null hypothesis, given that the null hypothesis is false. 
+
+Calculating the statistical power of an experiment (or a test, in general) involves some guesswork. We need to make assumptions about the distributions of potential outcomes, and about the expected treatment effect. We often assume that our potential outcomes come from a normal distribution (or rely on the CLT).  
+
+\section{Analytic formula}
+
+Gerber and Green (2012, p.93) provide a simple asymptotic approximation for the power of an experiment (where $N/2$ units are assigned to treatment) for a two-tailed hypothesis test: 
+
+\begin{equation*}
+\beta = \Phi \bigg(\frac{\mid \mu_T - \mu_C \mid \sqrt{N}}{2\sigma} - \Phi^1(1 - \frac{\alpha}{2}) \bigg)
+\end{equation*}
+
+where:
+\begin{itemize}
+\item $\beta$  is the statistical power of our experiment
+\item $\Phi(\cdot)$ is the normal cumulative distribution function (CDF)
+\item $\mu_T - \mu_C$ is our expected/hypothesized $\tau$ (i.e., treatment effect)
+\item $N$ is the number of units in our experiment
+\item $\sigma$ is the expected noise in our experiment (i.e., the standard deviation of outcomes)
+\item $\alpha$ is our significance level. We usually set this to 0.05
+\end{itemize}
+
+\section{Which parameters can you vary?}
+
+We can make power calculations varying some of the parameters of the experiment: 
+
+\begin{itemize}
+\item N 
+\item Noise ($\sigma$)
+\item Effect size ($\mid \mu_T - \mu_C \mid$)
+\end{itemize}
+
+\section{Beyond the analytic formula: power calculations with simulations}
+
+Imagine that we were able to conduct our experiment thousands of times. In this context, power is a measure of how often, given assumptions, we would obtain statistically significant results. So, instead of relying on the analytic formula, we can calculate the power of our experiment by simulating many many experiments on \texttt{R}. 
+
+\subsection{An example of power calculations for different sample size}
+
+<<example0, cache=TRUE>>=
+possible.ns <- seq(from=100, to=2000, by=50) 
+powers <- rep(NA, length(possible.ns))       
+for (j in 1:length(possible.ns)){
+ N <- possible.ns[j]                      
+ significant.experiments <- rep(NA, 500) 
+  for (i in 1:500){
+   Y0 <-  rnorm(n=N, mean=60, sd=20)              
+   tau <- 5                                       
+   Y1 <- Y0 + tau                                
+   Z.sim <- rbinom(n=N, size=1, prob=.5)         
+   Y.sim <- Y1*Z.sim + Y0*(1-Z.sim)               
+   fit.sim <- lm(Y.sim ~ Z.sim)                   
+   p.value <- summary(fit.sim)$coefficients[2,4]  
+   significant.experiments[i] <- (p.value <= 0.05)                                                  
+  }
+powers[j] <- mean(significant.experiments)
+}
+
+@
+
+Let's see how this looks: 
+
+<<example1, echo=FALSE>>=
+plot(possible.ns, powers, ylim=c(0,1), 
+     main= expression(paste("Power Calculation Different Sample Size (", tau, " = 5, SD = 20)")),
+     xlab = "Sample size - N")
+abline(h=0.8, col="red")
+@
+
+Let's see what happens with different \textbf{effect sizes}: 
+
+<<exmpale2, cache=TRUE,echo=FALSE,message=FALSE,warning=FALSE>>=
+possible.taus <- seq(from=0, to=20, by=0.25) 
+powers <- rep(NA, length(possible.taus))       
+for (j in 1:length(possible.taus)){
+ N <- 100   
+ tau <- possible.taus[j]                    
+ significant.experiments <- rep(NA, 500) 
+   for (i in 1:500){
+     Y0 <-  rnorm(n=N, mean=60, sd=20)                                                
+     Y1 <- Y0 + tau                                
+     Z.sim <- rbinom(n=N, size=1, prob=.5)         
+     Y.sim <- Y1*Z.sim + Y0*(1-Z.sim)               
+     fit.sim <- lm(Y.sim ~ Z.sim)                   
+     p.value <- summary(fit.sim)$coefficients[2,4]  
+     significant.experiments[i] <- (p.value <= 0.05)                                                  
+  }
+powers[j] <- mean(significant.experiments)
+}
+plot(possible.taus, powers, ylim=c(0,1), 
+     main= "Power Calculation Different Effect Size (N=100, SD=20)",
+     xlab = expression(paste("Effect Size ", tau)))
+abline(h=0.8, col="red")
+
+@
+
+Let's see what happens with \textbf{different noise}: 
+
+<<example3, cache=TRUE,echo=FALSE,message=FALSE,warning=FALSE>>=
+
+possible.sds <- seq(from=0, to=100, by=2) 
+powers <- rep(NA, length(possible.sds))       
+for (j in 1:length(possible.sds)){
+ N <- 200   
+ tau <- 5    
+ SDs <- possible.sds[j]
+ significant.experiments <- rep(NA, 500) 
+   for (i in 1:500){
+     Y0 <-  rnorm(n=N, mean=60, sd=SDs)                                                
+     Y1 <- Y0 + tau                                
+     Z.sim <- rbinom(n=N, size=1, prob=.5)         
+     Y.sim <- Y1*Z.sim + Y0*(1-Z.sim)               
+     fit.sim <- lm(Y.sim ~ Z.sim)                   
+     p.value <- summary(fit.sim)$coefficients[2,4]  
+     significant.experiments[i] <- (p.value <= 0.05)                                                  
+  }
+powers[j] <- mean(significant.experiments)
+}
+plot(possible.sds, powers, ylim=c(0,1), 
+     main= expression(paste("Power Calculation Different Noise Size (N=200, ", tau, " = 5)")),
+     xlab = "Standard Deviations")
+abline(h=0.8, col="red")
+
+@
+
+\subsection{Power Analysis for clustered randomized experiments (advanced)}
+
+<<cluster,message=FALSE,warning=FALSE, cache=TRUE,echo=FALSE>>=
+
+stopifnot(require(ggplot2))
+stopifnot(require(sandwich))
+          
+# Helper function:
+
+# inputs: model = design matrix, cluster = cluster vector:
+# nrows: number of 
+
+vcovCluster <- function(model, cluster){
+  if(nrow(model.matrix(model))!=length(cluster)){
+    stop("check your data: cluster variable has different N than model")
+  }
+  M <- length(unique(cluster))  # Number of clusters
+  N <- length(cluster)          # Sample size (clusters X n in cluster) 
+  K <- model$rank               # No. estimated parameters (from fitted model) 
+  if(M<50){
+    warning("Fewer than 50 clusters, variances may be unreliable (could try block bootstrap instead).")
+  }
+  dfc <- (M/(M - 1)) * ((N - 1)/(N - K))
+  uj  <- apply(estfun(model), 2, function(x) tapply(x, cluster, sum));
+  rcse.cov <- dfc * sandwich(model, meat = crossprod(uj)/N)
+  return(rcse.cov)
+}
+
+# Define the parameters for power analysis 
+
+n_clusters <- seq(from = 20, to = 200, by = 20)    # Number of clusters
+obs_per_cluster <- 2^(1:6)                         # Number of observations/cluster
+grid <- expand.grid(n_clusters, obs_per_cluster)   # All combinations of clusters, number of obs/cluster
+powers <- rep(NA, nrow(grid))                      # Empty object to collect simulation estimates
+alpha <- 0.05                                      # Standard significance level
+sims <- 400                                        # Number of simulations to conduct for each N
+
+# We are going to only vary the N (little n + number of clusters):
+
+#### Outer loop to vary the number of subjects ####
+for (j in 1:nrow(grid)){
+  
+  significant.experiments <- rep(NA, sims)   # Empty object to count significant experiments
+  
+  #### Inner loop to conduct experiments "sims" times over for each N ####
+  for (i in 1:sims){
+  
+    clust_id <- rep(1:grid[j,1], 
+                    each = grid[j,2])                # Cluster ID var--for SE function
+    clust_noise <- rep(rnorm(n = grid[j, 1], 
+                             mean = 20, sd = 10), 
+                       each = grid[j, 2])            # cluster-level noise (the same for
+                                                     # each little n in same cluster)
+    Y0 <-  rnorm(n=prod(grid[j,]), 
+                 mean=30, sd=15) + clust_noise       # Control potential outcome
+    tau <- 5                                         # Hypothesized treatment effect
+    Y1 <- Y0 + tau                                   # Treatment potential outcome
+    Z.sim <- rep(sample(x = c(rep(0, grid[j,1]/2),
+                              rep(1, grid[j,1]/2)),
+                        size = grid[j,1], 
+                        replace = F), 
+                each = grid[j,2])                    # Do cluster-level treatment assignment (complete RA)
+                                                     # Notice individuals within cluster receive same treatment
+    Y.sim <- Y1*Z.sim + Y0*(1-Z.sim)                 # Reveal outcomes according to assignment (i.e., y_obs)
+    fit.sim <- lm(Y.sim ~ Z.sim)                     # Do analysis (Simple regression) --> we use coeff.
+    se <- sqrt(vcovCluster(model = fit.sim, 
+                           cluster = clust_id)[2,2]) # Clustered standard error (why not SE from reg?)
+    p.value <- pt(abs(fit.sim$coef[2]/se), 
+                  df = summary(fit.sim)$df[2], 
+                  lower.tail = F)                    # Calculate p-value from Student's T distribution
+    significant.experiments[i] <- (p.value <= alpha) # Determine significance according to 
+                                                     # p <= 0.05
+  }
+  
+  powers[j] <- mean(significant.experiments)         # store average success rate (power) for each N
+}
+
+df <- data.frame(N_Clusters = grid[,1], Obs_per_Cluster = as.factor(grid[,2]), Power = powers)
+ggplot(data = df, aes(x = N_Clusters, y = Power, col = Obs_per_Cluster)) + 
+  geom_line() + theme_bw() + geom_hline(yintercept=0.8)
+
+@
+
+
+\end{document}
